@@ -32,8 +32,6 @@
 
 #include "powertop.h"
 
-int alpm_activated;
-
 static void activate_alpm(void)
 {
 	DIR *dir;
@@ -57,7 +55,6 @@ static void activate_alpm(void)
 	}
 
 	closedir(dir);
-	alpm_activated = 1;
 }
 
 void suggest_sata_alpm(void)
@@ -68,9 +65,6 @@ void suggest_sata_alpm(void)
 	char filename[PATH_MAX];
 	char line[1024];
 	int need_hint  = 0;
-
-	if (alpm_activated)
-		return;
 
 
 	dir = opendir("/sys/class/scsi_host/");

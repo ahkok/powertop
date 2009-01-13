@@ -2,7 +2,7 @@ BINDIR=/usr/bin
 LOCALESDIR=/usr/share/locale
 MANDIR=/usr/share/man/man1
 WARNFLAGS=-Wall  -W -Wshadow
-CFLAGS?=-O1 -g ${WARNFLAGS}
+CFLAGS?=-O2 -g ${WARNFLAGS}
 CC?=gcc
 
 
@@ -14,13 +14,8 @@ CC?=gcc
 # On Debian/Ubuntu distros, this can be found in the
 # libncursesw5-dev package. 
 #
-
-OBJS = powertop.o config.o process.o misctips.o bluetooth.o display.o suggestions.o wireless.o cpufreq.o \
-	sata.o xrandr.o ethernet.o cpufreqstats.o usb.o urbnum.o intelcstates.o
-	
-
-powertop: $(OBJS) Makefile powertop.h
-	$(CC) ${CFLAGS}  $(OBJS) -lncursesw -o powertop
+powertop: powertop.c config.c process.c misctips.c bluetooth.c display.c suggestions.c wireless.c cpufreq.c sata.c Makefile powertop.h
+	$(CC) ${CFLAGS}  powertop.c config.c process.c misctips.c bluetooth.c display.c suggestions.c wireless.c cpufreq.c sata.c -lncursesw -o powertop
 	@(cd po/ && $(MAKE))
 
 powertop.1.gz: powertop.1
@@ -40,7 +35,7 @@ uptrans:
 	@(cd po/ && env LG=$(LG) $(MAKE) $@)
 
 clean:
-	rm -f *~ powertop powertop.1.gz po/powertop.pot DEADJOE svn-commit* *.o *.orig 
+	rm -f *~ powertop powertop.1.gz po/powertop.pot DEADJOE svn-commit*
 	@(cd po/ && $(MAKE) $@)
 
 
