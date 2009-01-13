@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Intel Corporation
+ * Copyright (C) 2006, Intel Corporation
  *
  * This file is part of PowerTOP
  *
@@ -44,11 +44,10 @@ static void read_kernel_config(void)
 	if (configcount)
 		return;
 	if (access("/proc/config.gz", R_OK) == 0) {
-		file = popen("zcat /proc/config.gz 2> /dev/null", "r");
+		file = popen("zcat /proc/config.gz", "r");
 		while (file && !feof(file)) {
 			char line[100];
-			if (fgets(line, 100, file) == NULL)
-				break;
+			fgets(line, 100, file);
 			strcpy(configlines[configcount++], line);
 		}
 		pclose(file);
@@ -57,10 +56,7 @@ static void read_kernel_config(void)
 	file = fopen("/proc/sys/kernel/osrelease", "r");
 	if (!file)
 		return;
-	if (fgets(version, 100, file) == NULL) {
-		fclose(file);
-		return;
-	}
+	fgets(version, 100, file);
 	fclose(file);
 	c = strchr(version, '\n');
 	if (c)
@@ -75,8 +71,7 @@ static void read_kernel_config(void)
 		return;
 	while (!feof(file)) {
 		char line[100];
-		if (fgets(line, 100, file) == NULL)
-			break;
+		fgets(line, 100, file);
 		strcpy(configlines[configcount++], line);
 	}
 	fclose(file);
@@ -86,13 +81,15 @@ static void read_kernel_config(void)
  * Suggest the user to turn on/off a kernel config option.
  * "comment" gets displayed if it's not already set to the right value 
  */
-void suggest_kernel_config(char *string, int onoff, char *comment, int weight)
+void suggest_kernel_config(char *string, int onoff, char *comment)
 {
 	int i;
 	char searchon[100];
 	char searchoff[100];
 	int found = 0;
 
+	if (suggestioncount > 0)
+		return;
 	read_kernel_config();
 
 	sprintf(searchon, "%s=", string);
@@ -107,6 +104,7 @@ void suggest_kernel_config(char *string, int onoff, char *comment, int weight)
 			found = 1;
 	}
 	if (onoff || found)
-		add_suggestion(comment, weight, 0, NULL, NULL);
+		printf("%s\n", comment);
 	fflush(stdout);
+	suggestioncount++;
 }
