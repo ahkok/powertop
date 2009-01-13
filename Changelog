@@ -1,28 +1,3 @@
-
-1.11 --
-	* Fix compilation with PIC
-	* polling hint now refers to /dev/cdrom instead of /dev/scd0
-	* fix calculations for systems that vary in power draw proc info
-	* Display mwait usage
-	* fix EOF at input
-	* add --version|-v option
-	* spelling error in tips.
-
-1.10 --
-	* add the "P" key to show the PIDs of the processes when possible
-	* Add support for reading C-state info via sysfs
-	  (Kevin Hilman, Venki Pallipadi)
-	* Show USB suspend statistics of USB devices in "-d" dump mode
-	* Show USB suspend statistics as a low priority hint for busy
-	devices
-	* Add support for using the sysfs power supply class
-	  (Donnie Berkholz)
-	* Fix USB suspend suggestion to take semi blacklisted stuff into
-	  account
-	* Add support for Intel's 4965 wireless power saving mode
-	* On new enough cpus (and kernel 2.6.25), report which C-states the
-	  cpu and bios report/support.
-
 1.9 --
 	* add support for mac80211 based wireless power saving
 	* improve bluetooth inactivity detection (David Woodhouse)

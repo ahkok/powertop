@@ -35,21 +35,16 @@
 #include <assert.h>
 #include <locale.h>
 #include <time.h>
-#include <sys/stat.h>
 
 #include "powertop.h"
 
-#define VERSION "1.11"
-
 uint64_t start_usage[8], start_duration[8];
 uint64_t last_usage[8], last_duration[8];
-char cnames[8][16];
+
 
 double ticktime = 15.0;
 
 int interrupt_0, total_interrupt;
-
-int showpids = 0;
 
 static int maxcstate = 0;
 int topcstate = 0;
@@ -67,8 +62,7 @@ struct irqdata {
 
 struct irqdata interrupts[IRQCOUNT];
 
-#define FREQ_ACPI 3579.545
-static unsigned long FREQ;
+#define FREQ 3579.545
 
 int nostats;
 
@@ -100,27 +94,6 @@ void push_line(char *string, int count)
 		lines = realloc (lines, (linesize ? (linesize *= 2) : (linesize = 64)) * sizeof (struct line));
 	lines[linehead].string = strdup (string);
 	lines[linehead].count = count;
-	lines[linehead].pid[0] = 0;
-	linehead++;
-}
-
-void push_line_pid(char *string, int count, char *pid) 
-{
-	int i;
-	assert(string != NULL);
-	for (i = 0; i < linehead; i++)
-		if (strcmp(string, lines[i].string) == 0) {
-			lines[i].count += count;
-			if (pid && strcmp(lines[i].pid, pid)!=0)
-				lines[i].pid[0] = 0;
-			return;
-		}
-	if (linehead == linesize)
-		lines = realloc (lines, (linesize ? (linesize *= 2) : (linesize = 64)) * sizeof (struct line));
-	lines[linehead].string = strdup (string);
-	lines[linehead].count = count;
-	if (pid)
-		strcpy(lines[linehead].pid, pid);
 	linehead++;
 }
 
@@ -263,7 +236,7 @@ static void do_proc_irq(void)
 	fclose(file);
 }
 
-static void read_data_acpi(uint64_t * usage, uint64_t * duration)
+static void read_data(uint64_t * usage, uint64_t * duration)
 {
 	DIR *dir;
 	struct dirent *entry;
@@ -313,139 +286,6 @@ static void read_data_acpi(uint64_t * usage, uint64_t * duration)
 	closedir(dir);
 }
 
-static void read_data_cpuidle(uint64_t * usage, uint64_t * duration)
-{
-	DIR *cpudir;
-	DIR *dir;
-	struct dirent *entry;
-	FILE *file = NULL;
-	char line[4096];
-	char filename[128], *f;
-	int len, clevel = 0;
-
-	memset(usage, 0, 64);
-	memset(duration, 0, 64);
-
-	cpudir = opendir("/sys/devices/system/cpu");
-	if (!cpudir)
-		return;
-
-	/* Loop over cpuN entries */
-	while ((entry = readdir(cpudir))) {
-		if (strlen(entry->d_name) < 3)
-			continue;
-
-		if (!isdigit(entry->d_name[3]))
-			continue;
-
-		len = sprintf(filename, "/sys/devices/system/cpu/%s/cpuidle",
-			      entry->d_name);
-
-		dir = opendir(filename);
-		if (!dir)
-			return;
-
-		clevel = 0;
-
-		/* For each C-state, there is a stateX directory which
-		 * contains a 'usage' and a 'time' (duration) file */
-		while ((entry = readdir(dir))) {
-			if (strlen(entry->d_name) < 3)
-				continue;
-			sprintf(filename + len, "/%s/desc", entry->d_name);
-			file = fopen(filename, "r");
-			if (file) {
-
-				memset(line, 0, 4096);
-				f = fgets(line, 4096, file);
-				fclose(file);
-				if (f == NULL)
-					break;
-
-			
-				f = strstr(line, "MWAIT ");
-				if (f) {
-					f += 6;
-					clevel = (strtoull(f, NULL, 16)>>4) + 1;
-					sprintf(cnames[clevel], "C%i mwait", clevel);
-				} else
-					sprintf(cnames[clevel], "C%i\t", clevel);
-
-				f = strstr(line, "POLL IDLE");
-				if (f) {
-					clevel = 0;
-					sprintf(cnames[clevel], "%s\t", _("polling"));
-				}
-
-				f = strstr(line, "ACPI HLT");
-				if (f) {
-					clevel = 1;
-					sprintf(cnames[clevel], "%s\t", "C1 halt");
-				}
-			}
-			sprintf(filename + len, "/%s/usage", entry->d_name);
-			file = fopen(filename, "r");
-			if (!file)
-				continue;
-
-			memset(line, 0, 4096);
-			f = fgets(line, 4096, file);
-			fclose(file);
-			if (f == NULL)
-				break;
-
-			usage[clevel] += 1+strtoull(line, NULL, 10);
-
-			sprintf(filename + len, "/%s/time", entry->d_name);
-			file = fopen(filename, "r");
-			if (!file)
-				continue;
-		
-			memset(line, 0, 4096);
-			f = fgets(line, 4096, file);
-			fclose(file);
-			if (f == NULL)
-				break;
-
-			duration[clevel] += 1+strtoull(line, NULL, 10);
-
-			clevel++;
-			if (clevel > maxcstate)
-				maxcstate = clevel;
-		
-		}
-		closedir(dir);
-
-	}
-	closedir(cpudir);
-}
-
-static void read_data(uint64_t * usage, uint64_t * duration)
-{
-	int r;
-	struct stat s;
-
-	/* Then check for CPUidle */
-	r = stat("/sys/devices/system/cpu/cpu0/cpuidle", &s);
-	if (!r) {
-		read_data_cpuidle(usage, duration);
-		
-		/* perform residency calculations based on usecs */
-		FREQ = 1000;
-		return;
-	}
-
-	/* First, check for ACPI */
-	r = stat("/proc/acpi/processor", &s);
-	if (!r) {
-		read_data_acpi(usage, duration);
-
-		/* perform residency calculations based on ACPI timer */
-		FREQ = FREQ_ACPI;
-		return;
-	}
-}
-
 void stop_timerstats(void)
 {
 	FILE *file;
@@ -480,9 +320,7 @@ void sort_lines(void)
 	qsort (lines, linehead, sizeof (struct line), line_compare);
 }
 
-
-
-int print_battery_proc_acpi(void)
+void print_battery(void)
 {
 	DIR *dir;
 	struct dirent *dirent;
@@ -494,7 +332,7 @@ int print_battery_proc_acpi(void)
 
 	dir = opendir("/proc/acpi/battery");
 	if (!dir)
-		return 0;
+		return;
 
 	while ((dirent = readdir(dir))) {
 		int dontcount = 0;
@@ -566,198 +404,9 @@ int print_battery_proc_acpi(void)
 	}
 
 	show_acpi_power_line(rate, cap, prev_bat_cap - cap, time(NULL) - prev_bat_time);
-	return 1;
 }
 
-int print_battery_proc_pmu(void)
-{
-	char line[80];
-	int i;
-	int power_present = 0;
-	int num_batteries = 0;
-	/* unsigned rem_time_sec = 0; */
-	unsigned charge_mAh = 0, max_charge_mAh = 0, voltage_mV = 0;
-	int discharge_mA = 0;
-	FILE *fd;
-
-	fd = fopen("/proc/pmu/info", "r");
-	if (fd == NULL)
-		return 0;
-
-	while ( fgets(line, sizeof(line), fd) != NULL )
-	{
-		if (strncmp("AC Power", line, strlen("AC Power")) == 0)
-			sscanf(strchr(line, ':')+2, "%d", &power_present);
-		else if (strncmp("Battery count", line, strlen("Battery count")) == 0)
-			sscanf(strchr(line, ':')+2, "%d", &num_batteries);
-	}
-	fclose(fd);
-
-	for (i = 0; i < num_batteries; ++i)
-	{
-		char file_name[20];
-		int flags = 0;
-		/* int battery_charging, battery_full; */
-		/* unsigned this_rem_time_sec = 0; */
-		unsigned this_charge_mAh = 0, this_max_charge_mAh = 0;
-		unsigned this_voltage_mV = 0, this_discharge_mA = 0;
-
-		snprintf(file_name, sizeof(file_name), "/proc/pmu/battery_%d", i);
-		fd = fopen(file_name, "r");
-		if (fd == NULL)
-			continue;
-
-		while (fgets(line, sizeof(line), fd) != NULL)
-		{
-			if (strncmp("flags", line, strlen("flags")) == 0)
-				sscanf(strchr(line, ':')+2, "%x", &flags);
-			else if (strncmp("charge", line, strlen("charge")) == 0)
-				sscanf(strchr(line, ':')+2, "%d", &this_charge_mAh);
-			else if (strncmp("max_charge", line, strlen("max_charge")) == 0)
-				sscanf(strchr(line, ':')+2, "%d", &this_max_charge_mAh);
-			else if (strncmp("voltage", line, strlen("voltage")) == 0)
-				sscanf(strchr(line, ':')+2, "%d", &this_voltage_mV);
-			else if (strncmp("current", line, strlen("current")) == 0)
-				sscanf(strchr(line, ':')+2, "%d", &this_discharge_mA);
-			/* else if (strncmp("time rem.", line, strlen("time rem.")) == 0) */
-			/*   sscanf(strchr(line, ':')+2, "%d", &this_rem_time_sec); */
-		}
-		fclose(fd);
-
-		if ( !(flags & 0x1) )
-			/* battery isn't present */
-			continue;
-
-		/* battery_charging = flags & 0x2; */
-		/* battery_full = !battery_charging && power_present; */
-
-		charge_mAh += this_charge_mAh;
-		max_charge_mAh += this_max_charge_mAh;
-		voltage_mV += this_voltage_mV;
-		discharge_mA += this_discharge_mA;
-		/* rem_time_sec += this_rem_time_sec; */
-	}
-	show_pmu_power_line(voltage_mV, charge_mAh, max_charge_mAh,
-	                    discharge_mA);
-	return 1;
-}
-
-void print_battery_sysfs(void)
-{
-	DIR *dir;
-	struct dirent *dirent;
-	FILE *file;
-	double rate = 0;
-	double cap = 0;
-
-	char filename[256];
-	
-	if (print_battery_proc_acpi())
-		return;
-	
-	if (print_battery_proc_pmu())
-		return;
-
-	dir = opendir("/sys/class/power_supply");
-	if (!dir) {
-		return;
-	}
-
-	while ((dirent = readdir(dir))) {
-		int dontcount = 0;
-		double voltage = 0.0;
-		double amperes_drawn = 0.0;
-		double watts_drawn = 0.0;
-		double watts_left = 0.0;
-		char line[1024];
-
-		if (strstr(dirent->d_name, "AC"))
-			continue;
-
-		sprintf(filename, "/sys/class/power_supply/%s/present", dirent->d_name);
-		file = fopen(filename, "r");
-		if (!file)
-			continue;
-		int s;
-		if ((s = getc(file)) != EOF) {
-			if (s == 0)
-				break;
-		}
-		fclose(file);
-
-		sprintf(filename, "/sys/class/power_supply/%s/status", dirent->d_name);
-		file = fopen(filename, "r");
-		if (!file)
-			continue;
-		memset(line, 0, 1024);
-		if (fgets(line, 1024, file) != NULL) {
-			if (!strstr(line, "Discharging"))
-				dontcount = 1;
-		}
-		fclose(file);
-
-		sprintf(filename, "/sys/class/power_supply/%s/voltage_now", dirent->d_name);
-		file = fopen(filename, "r");
-		if (!file)
-			continue;
-		memset(line, 0, 1024);
-		if (fgets(line, 1024, file) != NULL) {
-			voltage = strtoull(line, NULL, 10) / 1000000.0;
-		}
-		fclose(file);
-
-		sprintf(filename, "/sys/class/power_supply/%s/energy_now", dirent->d_name);
-		file = fopen(filename, "r");
-		watts_left = 1;
-		if (!file) {
-			sprintf(filename, "/sys/class/power_supply/%s/charge_now", dirent->d_name);
-			file = fopen(filename, "r");
-			if (!file) 
-				continue;
-
-			/* W = A * V */
-			watts_left = voltage;
-		}
-		memset(line, 0, 1024);
-		if (fgets(line, 1024, file) != NULL) 
-			watts_left *= strtoull(line, NULL, 10) / 1000000.0;
-		fclose(file);
-
-		sprintf(filename, "/sys/class/power_supply/%s/current_now", dirent->d_name);
-		file = fopen(filename, "r");
-		if (!file)
-			continue;
-		memset(line, 0, 1024);
-		if (fgets(line, 1024, file) != NULL) {
-			amperes_drawn = strtoull(line, NULL, 10) / 1000000.0;
-		}
-		fclose(file);
-	
-		if (!dontcount) {
-			rate += watts_drawn + voltage * amperes_drawn;
-		}
-		cap += watts_left;
-		
-
-	}
-	closedir(dir);
-	if (prev_bat_cap - cap < 0.001 && rate < 0.001)
-		last_bat_time = 0;
-	if (!last_bat_time) {
-		last_bat_time = prev_bat_time = time(NULL);
-		last_bat_cap = prev_bat_cap = cap;
-	}
-	if (time(NULL) - last_bat_time >= 400) {
-		prev_bat_cap = last_bat_cap;
-		prev_bat_time = last_bat_time;
-		last_bat_time = time(NULL);
-		last_bat_cap = cap;
-	}
-
-	show_acpi_power_line(rate, cap, prev_bat_cap - cap, time(NULL) - prev_bat_time);
-}
-
-char cstate_lines[12][200];
+char cstate_lines[6][200];
 
 void usage()
 {
@@ -765,13 +414,6 @@ void usage()
 	printf(_("  -d, --dump            read wakeups once and print list of top offenders\n"));
 	printf(_("  -t, --time=DOUBLE     default time to gather data in seconds\n"));
 	printf(_("  -h, --help            Show this help message\n"));
-	printf(_("  -v, --version         Show version information and exit\n"));
-	exit(0);
-}
-
-void version()
-{
-	printf(_("powertop version %s\n"), VERSION);
 	exit(0);
 }
 
@@ -792,12 +434,11 @@ int main(int argc, char **argv)
  			{ "dump", 0, NULL, 'd' },
  			{ "time", 1, NULL, 't' },
  			{ "help", 0, NULL, 'h' },
- 			{ "version", 0, NULL, 'v' },
  			{ 0, 0, NULL, 0 }
  		};
  		int index2 = 0, c;
  		
- 		c = getopt_long(argc, argv, "dt:hv", opts, &index2);
+ 		c = getopt_long(argc, argv, "dt:h", opts, &index2);
  		if (c == -1)
  			break;
  		switch (c) {
@@ -809,9 +450,6 @@ int main(int argc, char **argv)
  			break;
  		case 'h':
  			usage();
- 			break;
- 		case 'v':
- 			version();
  			break;
  		default:
  			;
@@ -832,16 +470,13 @@ int main(int argc, char **argv)
 	do_proc_irq();
 	do_cpufreq_stats();
 	count_usb_urbs();
-	count_usb_urbs();
 
 	memset(cur_usage, 0, sizeof(cur_usage));
 	memset(cur_duration, 0, sizeof(cur_duration));
-	printf("PowerTOP " VERSION "   (C) 2007, 2008 Intel Corporation \n\n");
+	printf("PowerTOP 1.9    (C) 2007 Intel Corporation \n\n");
 	if (geteuid() != 0)
 		printf(_("PowerTOP needs to be run as root to collect enough information\n"));
 	printf(_("Collecting data for %i seconds \n"), (int)ticktime);
-	printf("\n\n");
-	print_intel_cstates();
 	stop_timerstats();
 
 	while (1) {
@@ -895,7 +530,7 @@ int main(int argc, char **argv)
 		memset(&cstate_lines, 0, sizeof(cstate_lines));
 		topcstate = -4;
 		if (totalevents == 0 && maxcstate <= 1) {
-			sprintf(cstate_lines[5],_("< Detailed C-state information is not available.>\n"));
+			sprintf(cstate_lines[5],_("< Detailed C-state information is only available on Mobile CPUs (laptops) >\n"));
 		} else {
 			double sleept, percentage;;
 			c0 = sysconf(_SC_NPROCESSORS_ONLN) * ticktime * 1000 * FREQ - totalticks;
@@ -907,19 +542,16 @@ int main(int argc, char **argv)
 			sprintf(cstate_lines[1], _("C0 (cpu running)        (%4.1f%%)\n"), percentage);
 			if (percentage > 50)
 				topcstate = 0;
-			for (i = 0; i < 8; i++)
+			for (i = 0; i < 4; i++)
 				if (cur_usage[i]) {
 					sleept = (cur_duration[i] - last_duration[i]) / (cur_usage[i] - last_usage[i]
 											+ 0.1) / FREQ;
 					percentage = (cur_duration[i] -
 					      last_duration[i]) * 100 /
 					     (sysconf(_SC_NPROCESSORS_ONLN) * ticktime * 1000 * FREQ);
-
-					if (cnames[i][0]==0)
-						sprintf(cnames[i],"C%i",i+1);
 					sprintf
-					    (cstate_lines[2+i], _("%s\t%5.1fms (%4.1f%%)\n"),
-					     cnames[i], sleept, percentage);
+					    (cstate_lines[2+i], _("C%i\t\t%5.1fms (%4.1f%%)\n"),
+					     i + 1, sleept, percentage);
 					if (maxsleep < sleept)
 						maxsleep = sleept;
 					if (percentage > 50)
@@ -993,7 +625,7 @@ int main(int argc, char **argv)
 			if (deferrable)
 				continue;
 			sprintf(line2, "%15s : %s", process, func);
-			push_line_pid(line2, cnt, pid);
+			push_line(line2, cnt);
 		}
 		if (file)
 			pclose(file);
@@ -1016,7 +648,7 @@ int main(int argc, char **argv)
 			show_wakeups(wakeups_per_second, ticktime, c0 * 100.0 / (sysconf(_SC_NPROCESSORS_ONLN) * ticktime * 1000 * FREQ) );
 		}
 		count_usb_urbs();
-		print_battery_sysfs();
+		print_battery();
 		count_lines();
 		sort_lines();
 
@@ -1037,11 +669,8 @@ int main(int argc, char **argv)
 
 		if (key) {
 			char keychar;
-			int keystroke = fgetc(stdin);
-			if (keystroke == EOF)
-				exit(EXIT_SUCCESS);
 
-			keychar = toupper(keystroke);
+			keychar = toupper(fgetc(stdin));
 			if (keychar == 'Q')
 				exit(EXIT_SUCCESS);
 			if (keychar == 'R')
@@ -1050,9 +679,7 @@ int main(int argc, char **argv)
 				suggestion_activate();
 				ticktime = 2;
 				displaytime = -1.0;
-			} else
-			if (keychar == 'P')
-				showpids = !showpids;
+			}
 		}
 
 		if (wakeups_per_second < 0)
@@ -1117,7 +744,7 @@ int main(int argc, char **argv)
 		/* suggest to stop hal polilng if it shows up in the top 50 and wakes up too much*/
 		suggest_process_death("hald-addon-stor : ", "hald-addon-storage", lines, min(linehead,50), 2.0,
 				    _( "Suggestion: Disable 'hal' from polling your cdrom with:  \n" 
-				       "hal-disable-polling --device /dev/cdrom 'hal' is the component that auto-opens a\n"
+				       "hal-disable-polling --device /dev/scd0 'hal' is the component that auto-opens a\n"
 				       "window if you plug in a CD but disables SATA power saving from kicking in."), 30);
 
 		/* suggest to kill sealert; it wakes up 10 times/second on a default F7 install*/
@@ -1142,11 +769,9 @@ int main(int argc, char **argv)
 		suggest_WOL_off();
 		suggest_writeback_time();
 		suggest_usb_autosuspend();
-		usb_activity_hint();
 
 		if (dump) {
 			print_all_suggestions();
-			display_usb_activity();
 			exit(EXIT_SUCCESS);
 		}
 
@@ -1170,6 +795,5 @@ int main(int argc, char **argv)
 
 		
 	}
-
 	return 0;
 }

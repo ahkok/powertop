@@ -31,7 +31,6 @@
 struct line {
 	char	*string;
 	int	count;
-	char 	pid[12];
 };
 
 typedef void (suggestion_func)(void);
@@ -59,19 +58,16 @@ void suggest_xrandr_TV_off(void);
 void suggest_WOL_off(void);
 void suggest_writeback_time(void);
 void suggest_usb_autosuspend(void);
-void usb_activity_hint(void);
 
 
 
 
-extern char cstate_lines[12][200];
-extern char cpufreqstrings[6][80];
+extern char cstate_lines[6][200];
+extern char cpufreqstrings[5][80];
 
 extern int topcstate;
 extern int topfreq;  
 extern int dump;
-
-extern int showpids;
 
 extern char status_bar_slots[10][40];
 extern char suggestion_key;
@@ -103,9 +99,6 @@ void show_title_bar(void);
 void setup_windows(void);
 void initialize_curses(void);
 void show_acpi_power_line(double rate, double cap, double capdelta, time_t time);
-void show_pmu_power_line(unsigned sum_voltage_mV,
-                         unsigned sum_charge_mAh, unsigned sum_max_charge_mAh,
-                         int sum_discharge_mA);
 void show_cstates(void);
 void show_wakeups(double d, double interval, double c0time);
 void show_timerstats(int nostats, int ticktime);
@@ -120,9 +113,6 @@ void push_line(char *string, int count);
 void  do_cpufreq_stats(void);
 void count_usb_urbs(void);
 
-void display_usb_activity(void);
-void activate_usb_autosuspend(void);
-void print_intel_cstates(void);
 
 
 #endif

@@ -39,9 +39,8 @@ struct device_data {
 	struct device_data *next;
 	char pathname[4096];
 	char human_name[4096];
-	uint64_t urbs, active, connected;
-	uint64_t previous_urbs, previous_active, previous_connected;
-	int controller;
+	uint64_t urbs;
+	uint64_t previous_urbs;
 };
 
 
@@ -53,8 +52,6 @@ static void cachunk_urbs(void)
 	ptr = devices;
 	while (ptr) {
 		ptr->previous_urbs = ptr->urbs;
-		ptr->previous_active = ptr->active;
-		ptr->previous_connected = ptr->connected;
 		ptr = ptr->next;
 	}
 }
@@ -66,25 +63,9 @@ static void update_urbnum(char *path, uint64_t count, char *shortname)
 	char fullpath[4096];
 	char name[4096], vendor[4096];
 	ptr = devices;
-
 	while (ptr) {
 		if (strcmp(ptr->pathname, path)==0) {
 			ptr->urbs = count;
-			sprintf(fullpath, "%s/power/active_duration", path);
-			file = fopen(fullpath, "r");
-			if (!file)
-				return;
-			fgets(name, 4096, file);
-			ptr->active = strtoull(name, NULL, 10);
-			fclose(file);
-			sprintf(fullpath, "%s/power/connected_duration", path);
-			file = fopen(fullpath, "r");
-			if (!file)
-				return;
-			fgets(name, 4096, file);
-			ptr->connected = strtoull(name, NULL, 10);
-			fclose(file);
-
 			return;
 		}
 		ptr = ptr->next;
@@ -121,9 +102,6 @@ static void update_urbnum(char *path, uint64_t count, char *shortname)
 		strcpy(ptr->human_name, path);
 	else
 		sprintf(ptr->human_name, _("USB device %4s : %s (%s)"), shortname, name, vendor);
-
-	if (strstr(ptr->human_name, "Host Controller"))
-		ptr->controller = 1;
 	
 }
 
@@ -167,53 +145,3 @@ void count_usb_urbs(void)
 	}
 }
 
-
-void display_usb_activity(void)
-{
-	struct device_data *dev;
-	printf("\n");
-	printf("%s\n", _("Recent USB suspend statistics"));
-	printf("%s\n", _("Active  Device name"));
-	dev = devices;
-	while (dev) {
-		printf("%5.1f%%\t%s\n", 100.0*(dev->active - dev->previous_active) / 
-			(0.00001 + dev->connected - dev->previous_connected), dev->human_name);
-		dev = dev->next;
-	}
-
-}
-
-void usb_activity_hint(void)
-{
-	int total_active = 0;
-	int pick;
-	struct device_data *dev;
-	dev = devices;
-	while (dev) {
-		if (dev->active-1 > dev->previous_active && !dev->controller)
-			total_active++;
-		dev = dev->next;
-	}
-	if (!total_active)
-		return;
-
-	pick = rand() % total_active;
-	total_active = 0;
-	dev = devices;
-	while (dev) {
-		if (dev->active-1 > dev->previous_active && !dev->controller) {
-			if (total_active == pick) {
-				char usb_hint[8000];
-				sprintf(usb_hint, _("A USB device is active %4.1f%% of the time:\n%s"),
-				 100.0*(dev->active - dev->previous_active) / 
-				(0.00001 + dev->connected - dev->previous_connected),
-				dev->human_name);
-				add_suggestion(usb_hint,
-				1, 'U', _(" U - Enable USB suspend "), activate_usb_autosuspend);
-			}
-			total_active++;
-		}
-		dev = dev->next;
-	}
-
-}
