@@ -55,7 +55,6 @@ struct suggestion {
 static struct suggestion *suggestions;
 static int total_weight;
 
-static char previous[1024];
 
 
 void reset_suggestions(void)
@@ -71,7 +70,7 @@ void reset_suggestions(void)
 		ptr = next;
 	}
 	suggestions = NULL;
-	strcpy(status_bar_slots[8],"");
+	strcpy(status_bar_slots[9],"");
 	suggestion_key = 255;
 	suggestion_activate = NULL;
 	total_weight = 0;
@@ -103,9 +102,8 @@ void pick_suggestion(void)
 {
 	int value, running = 0;
 	struct suggestion *ptr;
-	int weight;
 
-	strcpy(status_bar_slots[8],"");
+	strcpy(status_bar_slots[9],"");
 	suggestion_key = 255;
 	suggestion_activate = NULL;
 
@@ -115,38 +113,19 @@ void pick_suggestion(void)
 		return;
 	}
 	
-	weight = total_weight;
-	if (strlen(previous) && displaytime > 0.0)
-		weight+=50;
-	value = rand() % weight;
+	value = rand() % total_weight;
 	ptr = suggestions;
 	while (ptr) {
 		running += ptr->weight;
-		if (strcmp(ptr->string, previous)==0 && displaytime > 0.0)
-			running += 50;
 		if (running > value) {
 			if (ptr->keystring)
-				strncpy(status_bar_slots[8],ptr->keystring, 40);
+				strcpy(status_bar_slots[9],ptr->keystring);
 			suggestion_key = ptr->key;
 			suggestion_activate = ptr->func;
 			show_suggestion(ptr->string);
-			if (strcmp(ptr->string, previous)) {
-				displaytime = 30.0;
-				strcpy(previous, ptr->string);
-			}
 			return;
 		}
 		ptr = ptr->next;
 	}
-	show_suggestion("");
-	memset(previous, 0, sizeof(previous));
-	displaytime = -1.0;
-}
-
-void print_all_suggestions(void)
-{
-	struct suggestion *ptr;
-
-	for (ptr = suggestions; ptr; ptr = ptr->next)
-		printf("\n%s\n", ptr->string);
+	show_suggestion("You have found a PowerTOP bug. Congratulations.");
 }

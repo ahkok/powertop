@@ -42,7 +42,7 @@ struct cpufreqdata oldfreqs[16];
 
 struct cpufreqdata delta[16];
 
-char cpufreqstrings[6][80];
+char cpufreqstrings[4][80];
 int topfreq = -1;
 
 static void zap(void)
@@ -98,7 +98,6 @@ void  do_cpufreq_stats(void)
 
 	memcpy(&oldfreqs, &freqs, sizeof(freqs));
 	memset(&cpufreqstrings, 0, sizeof(cpufreqstrings));
-	sprintf(cpufreqstrings[0], _("P-states (frequencies)\n"));
 
 	for (ret = 0; ret<16; ret++)
 		freqs[ret].count = 0;
@@ -160,13 +159,13 @@ void  do_cpufreq_stats(void)
 		return;
 
 	qsort(&delta, maxfreq+1, sizeof(struct cpufreqdata), sort_by_count);
-	if (maxfreq>4)
-		maxfreq=4;
+	if (maxfreq>3)
+		maxfreq=3;
 	qsort(&delta, maxfreq+1, sizeof(struct cpufreqdata), sort_by_freq);
 
 	topfreq = -1;
-	for (ret = 0 ; ret<=maxfreq; ret++) {
-		sprintf(cpufreqstrings[ret+1], "%6s   %5.1f%%\n", HzToHuman(delta[ret].frequency), delta[ret].count * 100.0 / total_time);
+	for (ret =0 ; ret<=maxfreq; ret++) {
+		sprintf(cpufreqstrings[ret], "%6s   %5.1f%%", HzToHuman(delta[ret].frequency), delta[ret].count * 100.0 / total_time);
 		if (delta[ret].count > total_time/2)
 			topfreq = ret;
 	}
