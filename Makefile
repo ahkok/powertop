@@ -2,7 +2,7 @@ BINDIR=/usr/bin
 LOCALESDIR=/usr/share/locale
 MANDIR=/usr/share/man/man1
 WARNFLAGS=-Wall  -W -Wshadow
-CFLAGS?=-O1 -g ${WARNFLAGS}
+CFLAGS?=-Os -g ${WARNFLAGS}
 CC?=gcc
 
 
@@ -16,7 +16,7 @@ CC?=gcc
 #
 
 OBJS = powertop.o config.o process.o misctips.o bluetooth.o display.o suggestions.o wireless.o cpufreq.o \
-	sata.o xrandr.o ethernet.o cpufreqstats.o usb.o urbnum.o intelcstates.o
+	sata.o xrandr.o ethernet.o cpufreqstats.o usb.o
 	
 
 powertop: $(OBJS) Makefile powertop.h

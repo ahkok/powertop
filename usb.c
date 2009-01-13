@@ -32,7 +32,9 @@
 
 #include "powertop.h"
 
-void activate_usb_autosuspend(void)
+int alpm_activated;
+
+static void activate_usb_autosuspend(void)
 {
 	DIR *dir;
 	struct dirent *dirent;
@@ -50,17 +52,12 @@ void activate_usb_autosuspend(void)
 		file = fopen(filename, "w");
 		if (!file)
 			continue;
-		fprintf(file, "0\n");
-		fclose(file);
-		sprintf(filename, "/sys/bus/usb/devices/%s/power/level", dirent->d_name);
-		file = fopen(filename, "w");
-		if (!file)
-			continue;
-		fprintf(file, "auto\n");
+		fprintf(file, "1\n");
 		fclose(file);
 	}
 
 	closedir(dir);
+	alpm_activated = 1;
 }
 
 void suggest_usb_autosuspend(void)
@@ -72,6 +69,9 @@ void suggest_usb_autosuspend(void)
 	char line[1024];
 	int need_hint  = 0;
 
+	if (alpm_activated)
+		return;
+
 
 	dir = opendir("/sys/bus/usb/devices");
 	if (!dir)
@@ -89,27 +89,10 @@ void suggest_usb_autosuspend(void)
 			fclose(file);
 			continue;
 		}
-		if (strtoll(line, NULL,10)<0)
+		if (!strtoull(line, NULL,10)<1)
 			need_hint = 1;
 
 		fclose(file);
-
-
-		sprintf(filename, "/sys/bus/usb/devices/%s/power/level", dirent->d_name);
-		file = fopen(filename, "r");
-		if (!file)
-			continue;
-		memset(line, 0, 1024);
-		if (fgets(line, 1023,file)==NULL) {
-			fclose(file);
-			continue;
-		}
-		if (strstr(line, "on"))
-			need_hint = 1;
-
-		fclose(file);
-
-
 	}
 
 	closedir(dir);
@@ -121,5 +104,3 @@ void suggest_usb_autosuspend(void)
 				45, 'U', _(" U - Enable USB suspend "), activate_usb_autosuspend);
 	}
 }
-
-
